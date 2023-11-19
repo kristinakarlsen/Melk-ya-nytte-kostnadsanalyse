@@ -1,0 +1,65 @@
+---
+title: "Untitled"
+format: pdf
+editor: visual
+---
+
+## Beregning av utslippspriser
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(scales)
+library(lubridate)
+library(FinCal)
+```
+
+```{r}
+# Historiske kvotepliktige utslipp fra Melkøya
+Utslipp_melkøya <- read_excel("Anleggseksport.xlsx", 
+                             sheet = "Klimakvoter", skip = 1)
+
+# karbon-prisbane for 2023 fra finansdepatamentet
+Prisbane <- read_excel("karbonpriser2023.xlsx",
+                       sheet = "Prisbane kvotepliktige utslipp")
+
+Prisbane$År <- year(Prisbane$År)
+```
+
+```{r}
+A_utslipp <- Prisbane %>% 
+  rename(Prisbane = `kvotepliktige utslipp`) %>% 
+  mutate(Status = ifelse(År < 2030, 
+                         "planlegging/utbygging", 
+                         "ferdig")) %>% 
+  mutate(Analyseperiode = ifelse(Status == "ferdig", 
+                                   År-2029, 
+                                   0),
+         Utslippskutt = ifelse(Analyseperiode == 0, 
+                               0, 
+                               850000)) %>% 
+  mutate(Kostnadsbesparelse = Utslippskutt*Prisbane)
+
+A_beregninger <- A_utslipp %>% 
+  filter(Analyseperiode > 0) %>% 
+  mutate(diskonteringsfaktorer = (1 + 0.04)^(År - 2023)) %>% 
+  mutate(diskonterte_verdier = Kostnadsbesparelse / diskonteringsfaktorer) %>%
+  mutate(kostnad_høybane = Utslippskutt*høybane, 
+         kostnad_lavbane = Utslippskutt*lavbane) %>% 
+  mutate(diskontert_høybane = kostnad_høybane/diskonteringsfaktorer, 
+         diskontert_lavbane = kostnad_lavbane/diskonteringsfaktorer)
+  
+
+```
+
+```{r}
+nnv_utslipp <- 
+  tibble(Prisbane = c("Hovedprisbane", "Høyprisbane", "Lavprisbane"), 
+         "Netto Nåverdi" = c(sum(A_beregninger$diskonterte_verdier), 
+                             sum(A_beregninger$diskontert_høybane), 
+                             sum(A_beregninger$diskontert_lavbane)))
+  nnv_utslipp
+```
